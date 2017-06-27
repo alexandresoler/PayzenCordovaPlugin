@@ -65,7 +65,6 @@ public class CordovaPayzen extends CordovaPlugin
             try {
                 MposSDK.init(application);
                 MposSDK.setThemeColor(Color.parseColor("#F98253"));
-                MposSDK.updateNlpa(100);
             }
             catch (MposException e) {
                 raven.sendException(e);
@@ -127,7 +126,7 @@ public class CordovaPayzen extends CordovaPlugin
                             raven.sendMessage("MposSDK not initialized, cannot start() mPOS SDK");
                             runCallbackError(TOUCH_CARD_READER_NOT_AVAILABLE, "MposSDK not initialized, check MposException returned by the init() method");
                         }else {
-                            startActivity(0);
+                            startActivity();
                         }
                     }
                     catch (JSONException ex) {
@@ -144,50 +143,44 @@ public class CordovaPayzen extends CordovaPlugin
 
     /**
      * Register token and start the mpos activity
-     *
-     * @param nbAttempts Number of attempts. When attempts is 10 we launch callback error
      */
-    private void startActivity(Integer nbAttempts)
+    private void startActivity()
     {
         try {
             LOG.i("eliberty.cordova.plugin.payzen", "registerToken");
             MposSDK.registerToken(this.token);
 
-            if (MposSDK.isCardReaderAvailable()) {
-                LOG.i("eliberty.cordova.plugin.payzen", "isCardReaderAvailable");
-                // @todo: ne pas relancer peut etre le start à chaque paiement ?
-                MposResult mposResult = MposSDK.start(this.cordova.getActivity(), this.acceptorId);
-                if (mposResult != null) {
-                    LOG.i("eliberty.cordova.plugin.payzen", "start SDK");
-                    mposResult.setCallback(new MposResult.ResultCallback() {
-                        @Override
-                        public void onSuccess(Result result) {
-                            launchSuccessStartActivity();
-                        }
+			//If start never succeded
+			if(!MposSDK.isConfigServerOk()){
+                LOG.i("eliberty.cordova.plugin.payzen", "start");
+				MposResult mposResult = MposSDK.start(this.cordova.getActivity(), this.acceptorId);
+				if (mposResult != null) {
+					LOG.i("eliberty.cordova.plugin.payzen", "start SDK");
+					mposResult.setCallback(new MposResult.ResultCallback() {
+						@Override
+						public void onSuccess(Result result) {
+							launchSuccessStartActivity();
+						}
 
-                        @Override
-                        public void onError(Result error) {
-                            runCallbackError(error.getCode(), error.getMessage());
-                        }
+						@Override
+						public void onError(Result error) {
+							runCallbackError(error.getCode(), error.getMessage());
+						}
 
-                        @Override
-                        public void onError(Throwable e) {
-                            runCallbackError(Integer.toString(e.hashCode()), e.getMessage());
-                        }
-                    });
-                } else {
-                    LOG.w(TOUCH_INIT_MPOS_IN_ERROR, "MposSDK start() return null. MposSDK not initialized, check MposException returned by the init() method");
-                    runCallbackError(TOUCH_INIT_MPOS_IN_ERROR, "MposSDK start() return null. MposSDK not initialized, check MposException returned by the init() method");
-                }
-            } else if (nbAttempts < 10) {
-                LOG.i("eliberty.cordova.plugin.payzen", "not ready start SDK");
-                Thread.sleep(5000);
-                nbAttempts++;
-                startActivity(nbAttempts);
-            } else {
-                raven.sendMessage("CardReader not responding after 50 seconds. Is dongle turned on?");
-                runCallbackError(TOUCH_CARD_READER_NOT_AVAILABLE, "CardReader not responding. Is dongle turned on?");
-            }
+						@Override
+						public void onError(Throwable e) {
+							runCallbackError(Integer.toString(e.hashCode()), e.getMessage());
+						}
+					});
+				} else {
+					LOG.w(TOUCH_INIT_MPOS_IN_ERROR, "MposSDK start() return null. MposSDK not initialized, check MposException returned by the init() method");
+					runCallbackError(TOUCH_INIT_MPOS_IN_ERROR, "MposSDK start() return null. MposSDK not initialized, check MposException returned by the init() method");
+				}
+			}
+			//If start already called and succeded
+			else{
+				launchSuccessStartActivity();
+			}
         } catch (MposException e) {
             LOG.w("eliberty.cordova.plugin.payzen", "Error on starting mPOS SDK: MposException", e);
             raven.sendException(e);
@@ -223,13 +216,7 @@ public class CordovaPayzen extends CordovaPlugin
             mTransaction.setCustomer(mposCustomer);
             mTransaction.setOrderInfo(label);
 
-            if (MposSDK.isReady()) {
-                LOG.i("eliberty.cordova.plugin.payzen", "SDK is ready");
-                executeTransaction(mTransaction);
-            } else {
-                LOG.w("eliberty.cordova.plugin.payzen", "SDK is not ready !");
-                runCallbackError(TOUCH_SDK_NOT_READY, TOUCH_SDK_NOT_READY);
-            }
+            executeTransaction(mTransaction);
         }else{
             LOG.w("eliberty.cordova.plugin.payzen", "MposSDK.getDefaultCurrencies() is null");
             raven.sendMessage("MposSDK.getDefaultCurrencies() is null");
